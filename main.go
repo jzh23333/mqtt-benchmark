@@ -60,19 +60,20 @@ type JSONResults struct {
 
 func main() {
 	var (
-		broker               = flag.String("broker", "tcp://localhost:1883", "MQTT broker endpoint as scheme://host:port")
-		topic                = flag.String("topic", "/test", "MQTT topic for outgoing messages")
-		payload              = flag.String("payload", "", "MQTT message payload. If empty, then payload is generated based on the size parameter")
-		username             = flag.String("username", "", "MQTT client username (empty if auth disabled)")
-		password             = flag.String("password", "", "MQTT client password (empty if auth disabled)")
+		broker               = flag.String("broker", "tcp://8.213.135.102:1883", "MQTT broker endpoint as scheme://host:port")
+		topic                = flag.String("topic", "MS", "MQTT topic for outgoing messages")
+		payload              = flag.String("payload", "123", "MQTT message payload. If empty, then payload is generated based on the size parameter")
+		secret               = flag.String("secret", "1c2ab4d0-7452-4a4e-9ef2-1641c155eb05", "MQTT message aes encrypt key")
+		username             = flag.String("username", "gygqmws2k", "MQTT client username (empty if auth disabled)")
+		password             = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
 		qos                  = flag.Int("qos", 1, "QoS for published messages")
 		wait                 = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size                 = flag.Int("size", 100, "Size of the messages payload (bytes)")
-		count                = flag.Int("count", 100, "Number of messages to send per client")
-		clients              = flag.Int("clients", 10, "Number of clients to start")
+		count                = flag.Int("count", 1, "Number of messages to send per client")
+		clients              = flag.Int("clients", 1, "Number of clients to start")
 		format               = flag.String("format", "text", "Output format: text|json")
 		quiet                = flag.Bool("quiet", false, "Suppress logs while running")
-		clientPrefix         = flag.String("client-prefix", "mqtt-benchmark", "MQTT client id prefix (suffixed with '-<client-num>'")
+		clientPrefix         = flag.String("client-prefix", "63f32054-4eb0-4d99-8124-29e84932104b1672825608083", "MQTT client id prefix (suffixed with '-<client-num>'")
 		clientCert           = flag.String("client-cert", "", "Path to client certificate in PEM format")
 		clientKey            = flag.String("client-key", "", "Path to private clientKey in PEM format")
 		brokerCaCert         = flag.String("broker-ca-cert", "", "Path to broker CA certificate in PEM format")
@@ -118,6 +119,7 @@ func main() {
 			BrokerPass:      *password,
 			MsgTopic:        *topic,
 			MsgPayload:      *payload,
+			Secret:          *secret,
 			MsgSize:         *size,
 			MsgCount:        *count,
 			MsgQoS:          byte(*qos),

@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"github.com/krylovsk/mqtt-benchmark/pb"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"time"
 
@@ -13,19 +15,20 @@ import (
 
 // Client implements an MQTT client running benchmark test
 type Client struct {
-	ID          int
-	ClientID    string
-	BrokerURL   string
-	BrokerUser  string
-	BrokerPass  string
-	MsgTopic    string
-	MsgPayload  string
-	MsgSize     int
-	MsgCount    int
-	MsgQoS      byte
-	Quiet       bool
-	WaitTimeout time.Duration
-	TLSConfig   *tls.Config
+	ID              int
+	ClientID        string
+	BrokerURL       string
+	BrokerUser      string
+	BrokerPass      string
+	MsgTopic        string
+	MsgPayload      string
+	Secret          string
+	MsgSize         int
+	MsgCount        int
+	MsgQoS          byte
+	Quiet           bool
+	WaitTimeout     time.Duration
+	TLSConfig       *tls.Config
 	MessageInterval int
 }
 
@@ -52,7 +55,8 @@ func (c *Client) Run(res chan *RunResults) {
 				log.Printf("CLIENT %v ERROR publishing message: %v: at %v\n", c.ID, m.Topic, m.Sent.Unix())
 				runResults.Failures++
 			} else {
-				// log.Printf("Message published: %v: sent: %v delivered: %v flight time: %v\n", m.Topic, m.Sent, m.Delivered, m.Delivered.Sub(m.Sent))
+				log.Printf("Message published: %v: sent: %v delivered: %v flight time: %v\n", m.Topic, m.Sent, m.Delivered, m.Delivered.Sub(m.Sent))
+				// TODO decode payload
 				runResults.Successes++
 				times = append(times, m.Delivered.Sub(m.Sent).Seconds()*1000) // in milliseconds
 			}
@@ -80,7 +84,30 @@ func (c *Client) genMessages(ch chan *Message, done chan bool) {
 	var payload interface{}
 	// set payload if specified
 	if c.MsgPayload != "" {
-		payload = c.MsgPayload
+		var conversationType int32 = 0
+		var target = "nygqmws2k"
+		var conversationLine int32 = 0
+		var contentType int32 = 1
+		var persistFlag int32 = 3
+		msg := &pb.Message{
+			Conversation: &pb.Conversation{
+				Type:   &conversationType,
+				Target: &target,
+				Line:   &conversationLine,
+			},
+			FromUser: &c.BrokerUser,
+			Content: &pb.MessageContent{
+				Type:              &contentType,
+				SearchableContent: &c.MsgPayload,
+				PersistFlag:       &persistFlag,
+			},
+		}
+		msgBytes, err := proto.Marshal(msg)
+		if err != nil {
+			log.Panic(err)
+		}
+		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+		payload = cipherText
 	} else {
 		payload = make([]byte, c.MsgSize)
 	}
@@ -139,8 +166,10 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 	}
 
 	opts := mqtt.NewClientOptions().
+		SetProtocolVersion(4).
 		AddBroker(c.BrokerURL).
-		SetClientID(fmt.Sprintf("%s-%v", c.ClientID, c.ID)).
+		//SetClientID(fmt.Sprintf("%s-%v", c.ClientID, c.ID)).
+		SetClientID(fmt.Sprintf("%s", c.ClientID)).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
 		SetOnConnectHandler(onConnected).

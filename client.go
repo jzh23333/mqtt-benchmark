@@ -100,10 +100,9 @@ func (c *Client) beginLogin(doneLogin chan bool) {
 	log.Printf("CLIENT %d begin login", c.ID)
 
 	clientId, _ := uuid.NewUUID()
-	phone := rand.Intn(11)
 
 	postBody, _ := json.Marshal(map[string]string{
-		"mobile":   fmt.Sprintf("%d", phone),
+		"mobile":   fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999)),
 		"code":     "66666",
 		"platform": "2",
 		"clientId": clientId.String(),
@@ -136,6 +135,8 @@ func (c *Client) beginLogin(doneLogin chan bool) {
 	c.ClientID = clientId.String()
 	c.BrokerUser = userId
 	c.Secret = extractSecret(token)
+
+	log.Printf("clientId: %s, userId: %s, secret: %s", c.ClientID, c.BrokerUser, c.Secret)
 
 	doneLogin <- true
 }

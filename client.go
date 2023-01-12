@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/krylovsk/mqtt-benchmark/pb"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"log"
+	"math/rand"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/GaryBoone/GoStats/stats"
@@ -17,6 +25,7 @@ import (
 type Client struct {
 	ID              int
 	ClientID        string
+	ServerURL       string
 	BrokerURL       string
 	BrokerUser      string
 	BrokerPass      string
@@ -36,12 +45,18 @@ type Client struct {
 func (c *Client) Run(res chan *RunResults) {
 	newMsgs := make(chan *Message)
 	pubMsgs := make(chan *Message)
+	doneLogin := make(chan bool)
 	doneGen := make(chan bool)
 	donePub := make(chan bool)
 	runResults := new(RunResults)
 
 	started := time.Now()
-	// TODO simulate login and getToken
+	// begin login
+	go c.beginLogin(doneLogin)
+
+	log.Printf("CLIENT %d is logging in...", c.ID)
+	<-doneLogin
+	log.Printf("CLIENT %d login success", c.ID)
 
 	// start generator
 	go c.genMessages(newMsgs, doneGen)
@@ -57,8 +72,7 @@ func (c *Client) Run(res chan *RunResults) {
 				log.Printf("CLIENT %v ERROR publishing message: %v: at %v\n", c.ID, m.Topic, m.Sent.Unix())
 				runResults.Failures++
 			} else {
-				log.Printf("Message published: %v: sent: %v delivered: %v flight time: %v\n", m.Topic, m.Sent, m.Delivered, m.Delivered.Sub(m.Sent))
-				// TODO decode payload
+				//log.Printf("Message published: %v: sent: %v delivered: %v flight time: %v\n", m.Topic, m.Sent, m.Delivered, m.Delivered.Sub(m.Sent))
 				runResults.Successes++
 				times = append(times, m.Delivered.Sub(m.Sent).Seconds()*1000) // in milliseconds
 			}
@@ -80,6 +94,65 @@ func (c *Client) Run(res chan *RunResults) {
 			return
 		}
 	}
+}
+
+func (c *Client) beginLogin(doneLogin chan bool) {
+	log.Printf("CLIENT %d begin login", c.ID)
+
+	clientId, _ := uuid.NewUUID()
+	phone := rand.Intn(11)
+
+	postBody, _ := json.Marshal(map[string]string{
+		"mobile":   fmt.Sprintf("%d", phone),
+		"code":     "66666",
+		"platform": "2",
+		"clientId": clientId.String(),
+	})
+	requestBody := bytes.NewBuffer(postBody)
+	resp, err := http.Post(fmt.Sprintf("%s/login", c.ServerURL), "application/json", requestBody)
+	if err != nil {
+		log.Fatalf("login failure %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	var result = make(map[string]interface{})
+	if err = json.Unmarshal(body, &result); err != nil {
+		log.Fatalln(err)
+	}
+
+	if result["code"].(float64) != 0 {
+		log.Panic("login failure")
+	}
+
+	data := result["result"].(map[string]interface{})
+
+	userId := data["userId"].(string)
+	token := data["token"].(string)
+
+	c.ClientID = clientId.String()
+	c.BrokerUser = userId
+	c.Secret = extractSecret(token)
+
+	doneLogin <- true
+}
+
+func extractSecret(token string) string {
+	base64Text, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		log.Panic(err)
+	}
+	cipherText, err := AesDecrypt(base64Text, "")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	content := string(cipherText)
+	contents := strings.Split(content, "|")
+	return contents[1]
 }
 
 func (c *Client) genMessages(ch chan *Message, done chan bool) {
@@ -132,9 +205,11 @@ func getP2PSendMsg(target, fromUser, content string) []byte {
 }
 
 func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) {
+
 	onConnected := func(client mqtt.Client) {
 		if !c.Quiet {
 			log.Printf("CLIENT %v is connected to the broker %v\n", c.ID, c.BrokerURL)
+			log.Printf("clientId: %s, fromUser: %s", c.ClientID, c.BrokerUser)
 		}
 		ctr := 0
 		for {

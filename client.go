@@ -41,6 +41,8 @@ func (c *Client) Run(res chan *RunResults) {
 	runResults := new(RunResults)
 
 	started := time.Now()
+	// TODO simulate login and getToken
+
 	// start generator
 	go c.genMessages(newMsgs, doneGen)
 	// start publisher
@@ -83,36 +85,15 @@ func (c *Client) Run(res chan *RunResults) {
 func (c *Client) genMessages(ch chan *Message, done chan bool) {
 	var payload interface{}
 	// set payload if specified
-	if c.MsgPayload != "" {
-		var conversationType int32 = 0
-		var target = "nygqmws2k"
-		var conversationLine int32 = 0
-		var contentType int32 = 1
-		var persistFlag int32 = 3
-		msg := &pb.Message{
-			Conversation: &pb.Conversation{
-				Type:   &conversationType,
-				Target: &target,
-				Line:   &conversationLine,
-			},
-			FromUser: &c.BrokerUser,
-			Content: &pb.MessageContent{
-				Type:              &contentType,
-				SearchableContent: &c.MsgPayload,
-				PersistFlag:       &persistFlag,
-			},
-		}
-		msgBytes, err := proto.Marshal(msg)
-		if err != nil {
-			log.Panic(err)
-		}
-		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-		payload = cipherText
-	} else {
+	if c.MsgPayload == "" {
 		payload = make([]byte, c.MsgSize)
 	}
 
 	for i := 0; i < c.MsgCount; i++ {
+		msgBytes := getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+		payload = cipherText
+
 		ch <- &Message{
 			Topic:   c.MsgTopic,
 			QoS:     c.MsgQoS,
@@ -123,6 +104,31 @@ func (c *Client) genMessages(ch chan *Message, done chan bool) {
 
 	done <- true
 	// log.Printf("CLIENT %v is done generating messages\n", c.ID)
+}
+
+func getP2PSendMsg(target, fromUser, content string) []byte {
+	var conversationType int32 = 0
+	var conversationLine int32 = 0
+	var contentType int32 = 1
+	var persistFlag int32 = 3
+	msg := &pb.Message{
+		Conversation: &pb.Conversation{
+			Type:   &conversationType,
+			Target: &target,
+			Line:   &conversationLine,
+		},
+		FromUser: &fromUser,
+		Content: &pb.MessageContent{
+			Type:              &contentType,
+			SearchableContent: &content,
+			PersistFlag:       &persistFlag,
+		},
+	}
+	msgBytes, err := proto.Marshal(msg)
+	if err != nil {
+		log.Panic(err)
+	}
+	return msgBytes
 }
 
 func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) {

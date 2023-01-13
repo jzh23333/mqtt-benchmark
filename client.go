@@ -45,26 +45,21 @@ type Client struct {
 func (c *Client) Run(res chan *RunResults) {
 	newMsgs := make(chan *Message)
 	pubMsgs := make(chan *Message)
-	doneLogin := make(chan bool)
 	doneGen := make(chan bool)
 	donePub := make(chan bool)
 	runResults := new(RunResults)
 
+	// start login
+	c.login()
+
 	started := time.Now()
-	// begin login
-	go c.beginLogin(doneLogin)
-
-	log.Printf("CLIENT %d is logging in...", c.ID)
-	<-doneLogin
-	log.Printf("CLIENT %d login success", c.ID)
-
 	// start generator
 	go c.genMessages(newMsgs, doneGen)
 	// start publisher
 	go c.pubMessages(newMsgs, pubMsgs, doneGen, donePub)
 
 	runResults.ID = c.ID
-	times := []float64{}
+	var times []float64
 	for {
 		select {
 		case m := <-pubMsgs:
@@ -96,13 +91,16 @@ func (c *Client) Run(res chan *RunResults) {
 	}
 }
 
-func (c *Client) beginLogin(doneLogin chan bool) {
-	log.Printf("CLIENT %d begin login", c.ID)
+func (c *Client) login() {
+	if !c.Quiet {
+		log.Printf("CLIENT %d start login", c.ID)
+	}
 
 	clientId, _ := uuid.NewUUID()
+	mobile := fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999))
 
 	postBody, _ := json.Marshal(map[string]string{
-		"mobile":   fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999)),
+		"mobile":   mobile,
 		"code":     "66666",
 		"platform": "2",
 		"clientId": clientId.String(),
@@ -128,7 +126,6 @@ func (c *Client) beginLogin(doneLogin chan bool) {
 	}
 
 	data := result["result"].(map[string]interface{})
-
 	userId := data["userId"].(string)
 	token := data["token"].(string)
 
@@ -136,9 +133,9 @@ func (c *Client) beginLogin(doneLogin chan bool) {
 	c.BrokerUser = userId
 	c.Secret = extractSecret(token)
 
-	log.Printf("clientId: %s, userId: %s, secret: %s", c.ClientID, c.BrokerUser, c.Secret)
-
-	doneLogin <- true
+	if !c.Quiet {
+		log.Printf("CLIENT %d login success, mobile: %s, clientId: %s, userId: %s", c.ID, mobile, c.ClientID, c.BrokerUser)
+	}
 }
 
 func extractSecret(token string) string {
@@ -209,8 +206,8 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 
 	onConnected := func(client mqtt.Client) {
 		if !c.Quiet {
-			log.Printf("CLIENT %v is connected to the broker %v\n", c.ID, c.BrokerURL)
-			log.Printf("clientId: %s, fromUser: %s", c.ClientID, c.BrokerUser)
+			log.Printf("CLIENT %v is connected to the broker %v, clientId: %s, fromUser: %s\n",
+				c.ID, c.BrokerURL, c.ClientID, c.BrokerUser)
 		}
 		ctr := 0
 		for {

@@ -71,7 +71,7 @@ func main() {
 		wait                 = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size                 = flag.Int("size", 100, "Size of the messages payload (bytes)")
 		count                = flag.Int("count", 1, "Number of messages to send per client")
-		clients              = flag.Int("clients", 10, "Number of clients to start")
+		clients              = flag.Int("clients", 1, "Number of clients to start")
 		format               = flag.String("format", "text", "Output format: text|json")
 		quiet                = flag.Bool("quiet", false, "Suppress logs while running")
 		clientPrefix         = flag.String("client-prefix", "44e362c5-8717-4ea7-8f22-c9b1286832971672797923817", "MQTT client id prefix (suffixed with '-<client-num>'")

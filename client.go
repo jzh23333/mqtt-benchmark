@@ -32,13 +32,14 @@ type Client struct {
 	AdminPort       string
 	BrokerUser      string
 	BrokerPass      string
-	MsgTopic        string
 	MsgPayload      string
 	Secret          string
+	Identity        int
 	MsgSize         int
 	MsgCount        int
 	MsgQoS          byte
 	Quiet           bool
+	Lite            bool
 	WaitTimeout     time.Duration
 	TLSConfig       *tls.Config
 	MessageInterval int
@@ -52,8 +53,8 @@ func (c *Client) Run(res chan *RunResults) {
 	donePub := make(chan bool)
 	runResults := new(RunResults)
 
-	// start login
-	c.loginByAdmin()
+	// load clientUser
+	c.loadClientUser()
 
 	started := time.Now()
 	// start generator
@@ -83,7 +84,7 @@ func (c *Client) Run(res chan *RunResults) {
 			runResults.RunTime = duration.Seconds()
 			runResults.MsgsPerSec = float64(runResults.Successes) / duration.Seconds()
 			// calculate std if sample is > 1, otherwise leave as 0 (convention)
-			if c.MsgCount > 1 {
+			if c.MsgSize > 1 {
 				runResults.MsgTimeStd = stats.StatsSampleStandardDeviation(times)
 			}
 
@@ -96,18 +97,23 @@ func (c *Client) Run(res chan *RunResults) {
 
 func (c *Client) genMessages(ch chan *Message, done chan bool) {
 	var payload interface{}
-	// set payload if specified
-	if c.MsgPayload == "" {
-		payload = make([]byte, c.MsgSize)
-	}
 
 	for i := 0; i < c.MsgCount; i++ {
-		msgBytes := getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+		var msgBytes []byte
+		var topic string
+		if c.Identity == 1 {
+			topic = "MS"
+			msgBytes = getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+		} else {
+			topic = "MP"
+			msgBytes = getPullMsg(0)
+		}
+
 		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
 		payload = cipherText
 
 		ch <- &Message{
-			Topic:   c.MsgTopic,
+			Topic:   topic,
 			QoS:     c.MsgQoS,
 			Payload: payload,
 		}
@@ -140,6 +146,10 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 				} else {
 					m.Delivered = time.Now()
 					m.Error = false
+
+					if !c.Lite {
+						log.Printf("received message")
+					}
 				}
 				out <- m
 
@@ -172,7 +182,7 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 		})
 	if c.BrokerUser != "" && c.BrokerPass != "" {
 		opts.SetUsername(c.BrokerUser)
-		opts.SetPassword(c.BrokerPass)
+		opts.SetPassword(getPassword(c.BrokerUser, c.Secret))
 	}
 	if c.TLSConfig != nil {
 		opts.SetTLSConfig(c.TLSConfig)
@@ -185,6 +195,16 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 	if token.Error() != nil {
 		log.Printf("CLIENT %v had error connecting to the broker: %v\n", c.ID, token.Error())
 	}
+}
+
+func getPassword(username, secret string) string {
+	originText := fmt.Sprintf("%s|%v|%s", "testim20330111", time.Now().Unix()*1000, username)
+	pwdByte := []byte(originText)
+	desPwd := DESEncrypt(pwdByte, []byte("abcdefgh"))
+	base64Byte := make([]byte, base64.StdEncoding.EncodedLen(len(desPwd)))
+	base64.StdEncoding.Encode(base64Byte, desPwd)
+	aesPwd, _ := AesEncrypt(base64Byte, secret)
+	return string(aesPwd)
 }
 
 func getP2PSendMsg(target, fromUser, content string) []byte {
@@ -212,19 +232,41 @@ func getP2PSendMsg(target, fromUser, content string) []byte {
 	return msgBytes
 }
 
-func (c *Client) loginByAdmin() {
+func getPullMsg(messageId int64) []byte {
+	var pullType int32 = 0
+	msg := &pb.PullMessageRequest{
+		Id:   &messageId,
+		Type: &pullType,
+	}
+	msgBytes, err := proto.Marshal(msg)
+	if err != nil {
+		log.Panic(err)
+	}
+	return msgBytes
+}
+
+func (c *Client) loadClientUser() {
+	var userId string
+	if c.Identity == 1 {
+		userId = fmt.Sprintf("U_%v", c.ID)
+	} else {
+		userId = fmt.Sprintf("RU_%v", c.ID)
+	}
+	if !c.checkUserExist(userId) {
+		c.createUser(userId)
+	}
+
+	log.Printf("userId: %s", userId)
+
 	clientId, _ := uuid.NewUUID()
-	mobile := fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999))
-	userId := c.createUserByAdmin(mobile)
 	postBody, _ := json.Marshal(map[string]string{
 		"userId":   userId,
-		"platform": "2",
+		"platform": "1",
 		"clientId": clientId.String(),
 	})
-
 	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/get_token", c.ServerURL, c.AdminPort), postBody)
 	if result["code"].(float64) != 0 {
-		log.Panicf("login failure: %v", result)
+		log.Panicf("load failure: %v", result)
 	}
 
 	data := result["result"].(map[string]interface{})
@@ -235,15 +277,30 @@ func (c *Client) loginByAdmin() {
 	c.BrokerUser = userId
 
 	if !c.Quiet {
-		log.Printf("CLIENT %d login success, mobile: %s, clientId: %s, userId: %s", c.ID, mobile, c.ClientID, c.BrokerUser)
+		log.Printf("CLIENT %d user load success, clientId: %s, userId: %s", c.ID, c.ClientID, c.BrokerUser)
 	}
 }
 
-func (c *Client) createUserByAdmin(mobile string) string {
+func (c *Client) checkUserExist(userId string) bool {
 	postBody, _ := json.Marshal(map[string]string{
+		"userId": userId,
+	})
+	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/get_info", c.ServerURL, c.AdminPort), postBody)
+	if result["code"].(float64) != 0 {
+		return false
+	}
+	return true
+}
+
+func (c *Client) createUser(userId string) string {
+	mobile := fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999))
+	postBody, _ := json.Marshal(map[string]string{
+		"userId":      userId,
+		"type":        "0",
 		"name":        mobile,
-		"displayName": fmt.Sprintf("TestUser<U_%v>", c.ID),
+		"displayName": fmt.Sprintf("TestUser<%s>", userId),
 		"mobile":      mobile,
+		"password":    "123123",
 	})
 	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/create", c.ServerURL, c.AdminPort), postBody)
 	if result["code"].(float64) != 0 {
@@ -261,11 +318,11 @@ func adminPost(url string, reqBody []byte) map[string]interface{} {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	nonce := fmt.Sprintf("%11v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999))
+	nonce, _ := uuid.NewUUID()
 	timestamp := time.Now().UnixNano()
-	req.Header.Set("nonce", nonce)
+	req.Header.Set("nonce", nonce.String())
 	req.Header.Set("timestamp", fmt.Sprintf("%v", timestamp))
-	req.Header.Set("sign", getSign(nonce, timestamp))
+	req.Header.Set("sign", getSign(nonce.String(), timestamp))
 
 	client := http.Client{
 		Timeout: 10 * time.Second,

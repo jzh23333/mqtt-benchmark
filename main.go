@@ -63,17 +63,18 @@ func main() {
 		server          = flag.String("server", "8.213.135.102", "MQTT authorization endpoint as http://host:port")
 		imPort          = flag.String("im-port", "1883", "MQTT broker port")
 		adminPort       = flag.String("admin-port", "18080", "MQTT broker admin port")
-		topic           = flag.String("topic", "MS", "MQTT topic for outgoing messages")
 		payload         = flag.String("payload", "123", "MQTT message payload. If empty, then payload is generated based on the size parameter")
 		secret          = flag.String("secret", "a50f6f2f-3bdc-422e-b02d-45a2ba43439a", "MQTT message aes encrypt key")
 		username        = flag.String("username", "9ygqmws2k", "MQTT client username (empty if auth disabled)")
 		password        = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
+		identity        = flag.Int("identity", 2, "current server`s identity, 1 is sender or 2 is receiver")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
 		count           = flag.Int("count", 1, "Number of messages to send per client")
-		clients         = flag.Int("clients", 10, "Number of clients to start")
+		clients         = flag.Int("clients", 1, "Number of clients to start")
 		format          = flag.String("format", "text", "Output format: text|json")
+		lite            = flag.Bool("lite", true, "ignore msg while running")
 		quiet           = flag.Bool("quiet", false, "Suppress logs while running")
 		clientPrefix    = flag.String("client-prefix", "44e362c5-8717-4ea7-8f22-c9b1286832971672797923817", "MQTT client id prefix (suffixed with '-<client-num>'")
 		clientCert      = flag.String("client-cert", "", "Path to client certificate in PEM format")
@@ -121,13 +122,14 @@ func main() {
 			AdminPort:       *adminPort,
 			BrokerUser:      *username,
 			BrokerPass:      *password,
-			MsgTopic:        *topic,
 			MsgPayload:      *payload,
+			Identity:        *identity,
 			Secret:          *secret,
 			MsgSize:         *size,
 			MsgCount:        *count,
 			MsgQoS:          byte(*qos),
 			Quiet:           *quiet,
+			Lite:            *lite,
 			WaitTimeout:     time.Duration(*wait) * time.Millisecond,
 			TLSConfig:       tlsConfig,
 			MessageInterval: *messageInterval,
@@ -204,16 +206,16 @@ func printResults(results []*RunResults, totals *TotalResults, format string) {
 
 		fmt.Println(out.String())
 	default:
-		for _, res := range results {
-			fmt.Printf("======= CLIENT %d =======\n", res.ID)
-			fmt.Printf("Ratio:               %.3f (%d/%d)\n", float64(res.Successes)/float64(res.Successes+res.Failures), res.Successes, res.Successes+res.Failures)
-			fmt.Printf("Runtime (s):         %.3f\n", res.RunTime)
-			fmt.Printf("Msg time min (ms):   %.3f\n", res.MsgTimeMin)
-			fmt.Printf("Msg time max (ms):   %.3f\n", res.MsgTimeMax)
-			fmt.Printf("Msg time mean (ms):  %.3f\n", res.MsgTimeMean)
-			fmt.Printf("Msg time std (ms):   %.3f\n", res.MsgTimeStd)
-			fmt.Printf("Bandwidth (msg/sec): %.3f\n\n", res.MsgsPerSec)
-		}
+		//for _, res := range results {
+		//	fmt.Printf("======= CLIENT %d =======\n", res.ID)
+		//	fmt.Printf("Ratio:               %.3f (%d/%d)\n", float64(res.Successes)/float64(res.Successes+res.Failures), res.Successes, res.Successes+res.Failures)
+		//	fmt.Printf("Runtime (s):         %.3f\n", res.RunTime)
+		//	fmt.Printf("Msg time min (ms):   %.3f\n", res.MsgTimeMin)
+		//	fmt.Printf("Msg time max (ms):   %.3f\n", res.MsgTimeMax)
+		//	fmt.Printf("Msg time mean (ms):  %.3f\n", res.MsgTimeMean)
+		//	fmt.Printf("Msg time std (ms):   %.3f\n", res.MsgTimeStd)
+		//	fmt.Printf("Bandwidth (msg/sec): %.3f\n\n", res.MsgsPerSec)
+		//}
 		fmt.Printf("========= TOTAL (%d) =========\n", len(results))
 		fmt.Printf("Total Ratio:                 %.3f (%d/%d)\n", totals.Ratio, totals.Successes, totals.Successes+totals.Failures)
 		fmt.Printf("Total Runtime (sec):         %.3f\n", totals.TotalRunTime)

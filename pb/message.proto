@@ -34,3 +34,9 @@ message MessageContent {
   optional string extra = 12;
   optional string push_data = 13;
 }
+
+message PullMessageRequest {
+  required int64 id = 1;
+  required int32 type = 2;
+  optional int64 delay = 3;
+}

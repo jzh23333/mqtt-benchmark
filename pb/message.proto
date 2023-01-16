@@ -40,3 +40,9 @@ message PullMessageRequest {
   required int32 type = 2;
   optional int64 delay = 3;
 }
+
+message PullMessageResult {
+  repeated Message message = 1;
+  required int64 current = 2;
+  required int64 head = 3;
+}

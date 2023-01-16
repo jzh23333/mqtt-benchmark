@@ -46,7 +46,7 @@ type Client struct {
 }
 
 // Run runs benchmark tests and writes results in the provided channel
-func (c *Client) Run(res chan *RunResults) {
+func (c *Client) Run(res chan *RunResults, connected chan string, beginPub chan bool) {
 	newMsgs := make(chan *Message)
 	pubMsgs := make(chan *Message)
 	doneGen := make(chan bool)
@@ -58,9 +58,9 @@ func (c *Client) Run(res chan *RunResults) {
 
 	started := time.Now()
 	// start generator
-	go c.genMessages(newMsgs, doneGen)
+	go c.genMessages(newMsgs, beginPub, doneGen)
 	// start publisher
-	go c.pubMessages(newMsgs, pubMsgs, doneGen, donePub)
+	go c.pubMessages(newMsgs, pubMsgs, connected, doneGen, donePub)
 
 	runResults.ID = c.ID
 	var times []float64
@@ -95,41 +95,71 @@ func (c *Client) Run(res chan *RunResults) {
 	}
 }
 
-func (c *Client) genMessages(ch chan *Message, done chan bool) {
+func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 	var payload interface{}
 
-	for i := 0; i < c.MsgCount; i++ {
-		var msgBytes []byte
-		var topic string
-		if c.Identity == 1 {
-			topic = "MS"
-			msgBytes = getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
-		} else {
-			topic = "MP"
-			msgBytes = getPullMsg(0)
-		}
+	<-beginPub
 
-		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-		payload = cipherText
+	if c.Identity == 1 {
+		topic := "MS"
+		for i := 0; i < c.MsgCount; i++ {
+			msgBytes := getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
 
-		ch <- &Message{
-			Topic:   topic,
-			QoS:     c.MsgQoS,
-			Payload: payload,
+			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+			payload = cipherText
+
+			ch <- &Message{
+				Topic:   topic,
+				QoS:     c.MsgQoS,
+				Payload: payload,
+			}
+			time.Sleep(time.Duration(c.MessageInterval) * time.Millisecond)
 		}
-		time.Sleep(time.Duration(c.MessageInterval) * time.Millisecond)
+	} else {
+		topic := "MP"
+
+		interval := 10
+		totalInterval := 0
+		for {
+			msgBytes := getPullMsg(0)
+			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+			payload = cipherText
+
+			ch <- &Message{
+				Topic:   topic,
+				QoS:     c.MsgQoS,
+				Payload: payload,
+			}
+			totalInterval += interval
+			time.Sleep(time.Duration(interval) * time.Millisecond)
+
+			if totalInterval >= 1800000 {
+				break
+			}
+		}
 	}
 
 	done <- true
 	// log.Printf("CLIENT %v is done generating messages\n", c.ID)
 }
 
-func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) {
+func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneGen, donePub chan bool) {
+	messageHandler := func(client mqtt.Client, msg mqtt.Message) {
+		log.Printf("Received message: from topic: %s", msg.Topic())
+		if !c.Lite && msg.Topic() == "MP" {
+			result := &pb.PullMessageResult{}
+			if err := proto.Unmarshal(msg.Payload(), result); err != nil {
+				log.Fatalln(err)
+			}
+			log.Printf("Received message, user %v pull message: %d", c.BrokerUser, len(result.Message))
+		}
+	}
 	onConnected := func(client mqtt.Client) {
 		if !c.Quiet {
 			log.Printf("CLIENT %v is connected to the broker %v:%v, clientId: %s, fromUser: %s\n",
 				c.ID, c.ServerURL, c.IMPort, c.ClientID, c.BrokerUser)
 		}
+		connected <- c.BrokerUser
 		ctr := 0
 		for {
 			select {
@@ -147,8 +177,8 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 					m.Delivered = time.Now()
 					m.Error = false
 
-					if !c.Lite {
-						log.Printf("received message")
+					if m.Topic == "MP" {
+
 					}
 				}
 				out <- m
@@ -176,6 +206,7 @@ func (c *Client) pubMessages(in, out chan *Message, doneGen, donePub chan bool) 
 		SetKeepAlive(time.Duration(30) * time.Second).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
+		SetDefaultPublishHandler(messageHandler).
 		SetOnConnectHandler(onConnected).
 		SetConnectionLostHandler(func(client mqtt.Client, reason error) {
 			log.Printf("CLIENT %v lost connection to the broker: %v. Will reconnect...\n", c.ID, reason.Error())
@@ -255,8 +286,6 @@ func (c *Client) loadClientUser() {
 	if !c.checkUserExist(userId) {
 		c.createUser(userId)
 	}
-
-	log.Printf("userId: %s", userId)
 
 	clientId, _ := uuid.NewUUID()
 	postBody, _ := json.Marshal(map[string]string{

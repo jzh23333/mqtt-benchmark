@@ -108,6 +108,8 @@ func main() {
 	}
 
 	resCh := make(chan *RunResults)
+	connected := make(chan string)
+	beginPub := make(chan bool)
 	start := time.Now()
 	sleepTime := float64(*rampUpTimeInSec) / float64(*clients)
 	for i := 0; i < *clients; i++ {
@@ -134,9 +136,20 @@ func main() {
 			TLSConfig:       tlsConfig,
 			MessageInterval: *messageInterval,
 		}
-		go c.Run(resCh)
+		go c.Run(resCh, connected, beginPub)
 		time.Sleep(time.Duration(sleepTime*1000) * time.Millisecond)
 	}
+
+	connectedClients := 0
+	for connectedClients < *clients {
+		u := <-connected
+		log.Printf("Client %v is connected, user: %v", connectedClients, u)
+		connectedClients++
+	}
+
+	log.Printf("All clients(size: %v) are connected, will start publishing message in 3 seconds...", *clients)
+	time.Sleep(time.Duration(3) * time.Second)
+	beginPub <- true
 
 	// collect the results
 	results := make([]*RunResults, *clients)

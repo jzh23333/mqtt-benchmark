@@ -447,6 +447,69 @@ func (x *PullMessageResult) GetHead() int64 {
 	return 0
 }
 
+type NotifyMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type   *int32  `protobuf:"varint,1,req,name=type" json:"type,omitempty"`
+	Head   *int64  `protobuf:"varint,2,req,name=head" json:"head,omitempty"`
+	Target *string `protobuf:"bytes,3,opt,name=target" json:"target,omitempty"`
+}
+
+func (x *NotifyMessage) Reset() {
+	*x = NotifyMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pb_message_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NotifyMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NotifyMessage) ProtoMessage() {}
+
+func (x *NotifyMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_message_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NotifyMessage.ProtoReflect.Descriptor instead.
+func (*NotifyMessage) Descriptor() ([]byte, []int) {
+	return file_pb_message_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *NotifyMessage) GetType() int32 {
+	if x != nil && x.Type != nil {
+		return *x.Type
+	}
+	return 0
+}
+
+func (x *NotifyMessage) GetHead() int64 {
+	if x != nil && x.Head != nil {
+		return *x.Head
+	}
+	return 0
+}
+
+func (x *NotifyMessage) GetTarget() string {
+	if x != nil && x.Target != nil {
+		return *x.Target
+	}
+	return ""
+}
+
 var File_pb_message_proto protoreflect.FileDescriptor
 
 var file_pb_message_proto_rawDesc = []byte{
@@ -511,8 +574,13 @@ var file_pb_message_proto_rawDesc = []byte{
 	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
 	0x12, 0x18, 0x0a, 0x07, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x02, 0x28,
 	0x03, 0x52, 0x07, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x68, 0x65,
-	0x61, 0x64, 0x18, 0x03, 0x20, 0x02, 0x28, 0x03, 0x52, 0x04, 0x68, 0x65, 0x61, 0x64, 0x42, 0x05,
-	0x5a, 0x03, 0x2f, 0x70, 0x62,
+	0x61, 0x64, 0x18, 0x03, 0x20, 0x02, 0x28, 0x03, 0x52, 0x04, 0x68, 0x65, 0x61, 0x64, 0x22, 0x4f,
+	0x0a, 0x0d, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x79, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12,
+	0x12, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x02, 0x28, 0x05, 0x52, 0x04, 0x74,
+	0x79, 0x70, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x68, 0x65, 0x61, 0x64, 0x18, 0x02, 0x20, 0x02, 0x28,
+	0x03, 0x52, 0x04, 0x68, 0x65, 0x61, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65,
+	0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x42,
+	0x05, 0x5a, 0x03, 0x2f, 0x70, 0x62,
 }
 
 var (
@@ -527,13 +595,14 @@ func file_pb_message_proto_rawDescGZIP() []byte {
 	return file_pb_message_proto_rawDescData
 }
 
-var file_pb_message_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pb_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pb_message_proto_goTypes = []interface{}{
 	(*Message)(nil),            // 0: pb.Message
 	(*Conversation)(nil),       // 1: pb.Conversation
 	(*MessageContent)(nil),     // 2: pb.MessageContent
 	(*PullMessageRequest)(nil), // 3: pb.PullMessageRequest
 	(*PullMessageResult)(nil),  // 4: pb.PullMessageResult
+	(*NotifyMessage)(nil),      // 5: pb.NotifyMessage
 }
 var file_pb_message_proto_depIdxs = []int32{
 	1, // 0: pb.Message.conversation:type_name -> pb.Conversation
@@ -612,6 +681,18 @@ func file_pb_message_proto_init() {
 				return nil
 			}
 		}
+		file_pb_message_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NotifyMessage); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -619,7 +700,7 @@ func file_pb_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_pb_message_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -46,3 +46,9 @@ message PullMessageResult {
   required int64 current = 2;
   required int64 head = 3;
 }
+
+message NotifyMessage {
+  required int32 type = 1;
+  required int64 head = 2;
+  optional string target = 3;
+}

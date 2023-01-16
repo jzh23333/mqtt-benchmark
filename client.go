@@ -21,6 +21,7 @@ import (
 	"github.com/GaryBoone/GoStats/stats"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	//mqtt "github.com/eclipse/paho.golang/autopaho"
 )
 
 // Client implements an MQTT client running benchmark test
@@ -121,14 +122,8 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 		interval := 10
 		totalInterval := 0
 		for {
-			msgBytes := getPullMsg(0)
-			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-			payload = cipherText
-
 			ch <- &Message{
-				Topic:   topic,
-				QoS:     c.MsgQoS,
-				Payload: payload,
+				Topic: topic,
 			}
 			totalInterval += interval
 			time.Sleep(time.Duration(interval) * time.Millisecond)
@@ -145,13 +140,32 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 
 func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneGen, donePub chan bool) {
 	messageHandler := func(client mqtt.Client, msg mqtt.Message) {
-		log.Printf("Received message: from topic: %s", msg.Topic())
-		if !c.Lite && msg.Topic() == "MP" {
+		log.Printf("Received message from topic: %s", msg.Topic())
+		if msg.Topic() == "MP" {
 			result := &pb.PullMessageResult{}
 			if err := proto.Unmarshal(msg.Payload(), result); err != nil {
 				log.Fatalln(err)
 			}
-			log.Printf("Received message, user %v pull message: %d", c.BrokerUser, len(result.Message))
+			log.Printf("Received message, user %v pull message: %d,%v", c.BrokerUser, len(result.Message), result)
+		} else if msg.Topic() == "MS" {
+			result := &pb.Message{}
+			if err := proto.Unmarshal(msg.Payload(), result); err != nil {
+				log.Fatalln(err)
+			}
+			log.Printf("Received message, user %v send message: %v", c.BrokerUser, result)
+		} else if msg.Topic() == "MN" {
+			result := &pb.NotifyMessage{}
+			if err := proto.Unmarshal(msg.Payload(), result); err != nil {
+				log.Fatalln(err)
+			}
+			log.Printf("User %v received notify message: %v", c.BrokerUser, result)
+
+			current := *result.Head - 1
+			msgBytes := getPullMsg(&current)
+			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+			token := client.Publish("MP", c.MsgQoS, true, cipherText)
+			res := token.WaitTimeout(c.WaitTimeout)
+			log.Printf("Send pull message: %v", res)
 		}
 	}
 	onConnected := func(client mqtt.Client) {
@@ -164,8 +178,11 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 		for {
 			select {
 			case m := <-in:
+				if m.Topic == "MP" {
+					continue
+				}
 				m.Sent = time.Now()
-				token := client.Publish(m.Topic, m.QoS, false, m.Payload)
+				token := client.Publish(m.Topic, m.QoS, true, m.Payload)
 				res := token.WaitTimeout(c.WaitTimeout)
 				if !res {
 					log.Printf("CLIENT %v Timeout sending message: %v\n", c.ID, token.Error())
@@ -176,10 +193,6 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 				} else {
 					m.Delivered = time.Now()
 					m.Error = false
-
-					if m.Topic == "MP" {
-
-					}
 				}
 				out <- m
 
@@ -263,10 +276,10 @@ func getP2PSendMsg(target, fromUser, content string) []byte {
 	return msgBytes
 }
 
-func getPullMsg(messageId int64) []byte {
+func getPullMsg(messageId *int64) []byte {
 	var pullType int32 = 0
 	msg := &pb.PullMessageRequest{
-		Id:   &messageId,
+		Id:   messageId,
 		Type: &pullType,
 	}
 	msgBytes, err := proto.Marshal(msg)

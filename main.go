@@ -147,7 +147,11 @@ func main() {
 		connectedClients++
 	}
 
-	log.Printf("All clients(size: %v) are connected, will start publishing message in 3 seconds...", *clients)
+	action := "publishing"
+	if *identity == 2 {
+		action = "receiving"
+	}
+	log.Printf("All clients(size: %v) are connected, will start %s message in 3 seconds...", *clients, action)
 	time.Sleep(time.Duration(3) * time.Second)
 	beginPub <- true
 
@@ -165,7 +169,7 @@ func main() {
 
 func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampleSize int) *TotalResults {
 	totals := new(TotalResults)
-	totals.TotalRunTime = totalTime.Seconds()
+	totals.TotalRunTime = totalTime.Seconds() - 3
 
 	msgTimeMeans := make([]float64, len(results))
 	msgsPerSecs := make([]float64, len(results))

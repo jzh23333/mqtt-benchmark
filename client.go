@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
@@ -15,13 +16,13 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/GaryBoone/GoStats/stats"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	//mqtt "github.com/eclipse/paho.golang/autopaho"
+	"github.com/krylovsk/mqtt-benchmark/mqtt"
 )
 
 // Client implements an MQTT client running benchmark test
@@ -232,6 +233,7 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 		opts.SetTLSConfig(c.TLSConfig)
 	}
 
+	mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	client := mqtt.NewClient(opts)
 	token := client.Connect()
 	token.Wait()
@@ -300,11 +302,13 @@ func (c *Client) loadClientUser() {
 		c.createUser(userId)
 	}
 
-	clientId, _ := uuid.NewUUID()
+	h := md5.New()
+	io.WriteString(h, userId)
+	clientId := fmt.Sprintf("%x", h.Sum(nil))
 	postBody, _ := json.Marshal(map[string]string{
 		"userId":   userId,
 		"platform": "1",
-		"clientId": clientId.String(),
+		"clientId": clientId,
 	})
 	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/get_token", c.ServerURL, c.AdminPort), postBody)
 	if result["code"].(float64) != 0 {
@@ -315,7 +319,7 @@ func (c *Client) loadClientUser() {
 	token := data["token"].(string)
 
 	c.Secret = extractSecret(token)
-	c.ClientID = clientId.String()
+	c.ClientID = clientId
 	c.BrokerUser = userId
 
 	if !c.Quiet {

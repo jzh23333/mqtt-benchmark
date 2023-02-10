@@ -67,15 +67,15 @@ func main() {
 		secret          = flag.String("secret", "a50f6f2f-3bdc-422e-b02d-45a2ba43439a", "MQTT message aes encrypt key")
 		username        = flag.String("username", "9ygqmws2k", "MQTT client username (empty if auth disabled)")
 		password        = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
-		identity        = flag.Int("identity", 2, "current server`s identity, 1 is sender or 2 is receiver")
+		identity        = flag.Int("identity", 1, "current server`s identity, 1 is sender or 2 is receiver")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
-		count           = flag.Int("count", 1, "Number of messages to send per client")
-		clients         = flag.Int("clients", 1, "Number of clients to start")
+		count           = flag.Int("count", 50, "Number of messages to send per client")
+		clients         = flag.Int("clients", 100, "Number of clients to start")
 		format          = flag.String("format", "text", "Output format: text|json")
 		lite            = flag.Bool("lite", true, "ignore msg while running")
-		quiet           = flag.Bool("quiet", false, "Suppress logs while running")
+		quiet           = flag.Bool("quiet", true, "Suppress logs while running")
 		clientPrefix    = flag.String("client-prefix", "44e362c5-8717-4ea7-8f22-c9b1286832971672797923817", "MQTT client id prefix (suffixed with '-<client-num>'")
 		clientCert      = flag.String("client-cert", "", "Path to client certificate in PEM format")
 		clientKey       = flag.String("client-key", "", "Path to private clientKey in PEM format")
@@ -110,7 +110,6 @@ func main() {
 	resCh := make(chan *RunResults)
 	connected := make(chan string)
 	beginPub := make(chan bool)
-	start := time.Now()
 	sleepTime := float64(*rampUpTimeInSec) / float64(*clients)
 	for i := 0; i < *clients; i++ {
 		if !*quiet {
@@ -140,6 +139,7 @@ func main() {
 		time.Sleep(time.Duration(sleepTime*1000) * time.Millisecond)
 	}
 
+	start := time.Now()
 	connectedClients := 0
 	for connectedClients < *clients {
 		u := <-connected
@@ -153,7 +153,9 @@ func main() {
 	}
 	log.Printf("All clients(size: %v) are connected, will start %s message in 3 seconds...", *clients, action)
 	time.Sleep(time.Duration(3) * time.Second)
-	beginPub <- true
+	for i := 0; i < *clients; i++ {
+		beginPub <- true
+	}
 
 	// collect the results
 	results := make([]*RunResults, *clients)
@@ -181,6 +183,7 @@ func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampl
 		totals.Successes += res.Successes
 		totals.Failures += res.Failures
 		totals.TotalMsgsPerSec += res.MsgsPerSec
+		//totals.TotalRunTime += res.RunTime - 3
 
 		if res.MsgTimeMin < totals.MsgTimeMin {
 			totals.MsgTimeMin = res.MsgTimeMin
@@ -192,7 +195,7 @@ func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampl
 
 		msgTimeMeans[i] = res.MsgTimeMean
 		msgsPerSecs[i] = res.MsgsPerSec
-		runTimes[i] = res.RunTime
+		runTimes[i] = res.RunTime - 3
 		bws[i] = res.MsgsPerSec
 	}
 	totals.Ratio = float64(totals.Successes) / float64(totals.Successes+totals.Failures)
@@ -208,6 +211,7 @@ func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampl
 }
 
 func printResults(results []*RunResults, totals *TotalResults, format string) {
+	log.Println("All message is published.")
 	switch format {
 	case "json":
 		jr := JSONResults{

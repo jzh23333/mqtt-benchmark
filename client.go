@@ -16,7 +16,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -233,7 +232,7 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 		opts.SetTLSConfig(c.TLSConfig)
 	}
 
-	mqtt.DEBUG = log.New(os.Stdout, "", 0)
+	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	client := mqtt.NewClient(opts)
 	token := client.Connect()
 	token.Wait()

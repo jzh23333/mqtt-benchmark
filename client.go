@@ -3,10 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/md5"
-	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -16,7 +14,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/GaryBoone/GoStats/stats"
@@ -104,7 +101,7 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 	if c.Identity == 1 {
 		topic := "MS"
 		for i := 0; i < c.MsgCount; i++ {
-			msgBytes := getP2PSendMsg("nygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+			msgBytes := getP2PSendMsg(1, "vygqmws2k", c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
 
 			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
 			payload = cipherText
@@ -160,12 +157,12 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 			}
 			log.Printf("User %v received notify message: %v", c.BrokerUser, result)
 
-			current := *result.Head - 1
-			msgBytes := getPullMsg(&current)
-			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-			token := client.Publish("MP", c.MsgQoS, true, cipherText)
-			res := token.WaitTimeout(c.WaitTimeout)
-			log.Printf("Send pull message: %v", res)
+			//current := *result.Head - 1
+			//msgBytes := getPullMsg(&current)
+			//cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+			//token := client.Publish("MP", c.MsgQoS, true, cipherText)
+			//res := token.WaitTimeout(c.WaitTimeout)
+			//log.Printf("Send pull message: %v", res)
 		}
 	}
 	onConnected := func(client mqtt.Client) {
@@ -252,8 +249,7 @@ func getPassword(username, secret string) string {
 	return string(aesPwd)
 }
 
-func getP2PSendMsg(target, fromUser, content string) []byte {
-	var conversationType int32 = 0
+func getP2PSendMsg(conversationType int32, target, fromUser, content string) []byte {
 	var conversationLine int32 = 0
 	var contentType int32 = 1
 	var persistFlag int32 = 3
@@ -297,104 +293,20 @@ func (c *Client) loadClientUser() {
 	} else {
 		userId = fmt.Sprintf("RU_%v", c.ID)
 	}
-	if !c.checkUserExist(userId) {
-		c.createUser(userId)
+	if !CheckUserExist(userId, c.ServerURL, c.AdminPort) {
+		CreateUser(userId, c.ServerURL, c.AdminPort)
 	}
 
 	h := md5.New()
 	io.WriteString(h, userId)
 	clientId := fmt.Sprintf("%x", h.Sum(nil))
-	postBody, _ := json.Marshal(map[string]string{
-		"userId":   userId,
-		"platform": "1",
-		"clientId": clientId,
-	})
-	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/get_token", c.ServerURL, c.AdminPort), postBody)
-	if result["code"].(float64) != 0 {
-		log.Panicf("load failure: %v", result)
-	}
-
-	data := result["result"].(map[string]interface{})
-	token := data["token"].(string)
-
-	c.Secret = extractSecret(token)
+	c.Secret = GetSecret(userId, clientId, c.ServerURL, c.AdminPort)
 	c.ClientID = clientId
 	c.BrokerUser = userId
 
 	if !c.Quiet {
 		log.Printf("CLIENT %d user load success, clientId: %s, userId: %s", c.ID, c.ClientID, c.BrokerUser)
 	}
-}
-
-func (c *Client) checkUserExist(userId string) bool {
-	postBody, _ := json.Marshal(map[string]string{
-		"userId": userId,
-	})
-	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/get_info", c.ServerURL, c.AdminPort), postBody)
-	if result["code"].(float64) != 0 {
-		return false
-	}
-	return true
-}
-
-func (c *Client) createUser(userId string) string {
-	mobile := fmt.Sprintf("%011v", rand.New(rand.NewSource(time.Now().UnixNano())).Int63n(99999999999))
-	postBody, _ := json.Marshal(map[string]string{
-		"userId":      userId,
-		"type":        "0",
-		"name":        mobile,
-		"displayName": fmt.Sprintf("TestUser<%s>", userId),
-		"mobile":      mobile,
-		"password":    "123123",
-	})
-	result := adminPost(fmt.Sprintf("http://%s:%s/admin/user/create", c.ServerURL, c.AdminPort), postBody)
-	if result["code"].(float64) != 0 {
-		log.Panicf("create user failure: %v", result)
-	}
-	data := result["result"].(map[string]interface{})
-	return data["userId"].(string)
-}
-
-func adminPost(url string, reqBody []byte) map[string]interface{} {
-	requestBody := bytes.NewBuffer(reqBody)
-	req, err := http.NewRequest(http.MethodPost, url, requestBody)
-	if err != nil {
-		log.Panicf("new request failure %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	nonce, _ := uuid.NewUUID()
-	timestamp := time.Now().UnixNano()
-	req.Header.Set("nonce", nonce.String())
-	req.Header.Set("timestamp", fmt.Sprintf("%v", timestamp))
-	req.Header.Set("sign", getSign(nonce.String(), timestamp))
-
-	client := http.Client{
-		Timeout: 10 * time.Second,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Panicf("request failure %v", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	var result = make(map[string]interface{})
-	if err = json.Unmarshal(body, &result); err != nil {
-		log.Fatalln(err)
-	}
-	return result
-}
-
-func getSign(nonce string, timestamp int64) string {
-	signStr := fmt.Sprintf("%s|123456|%d", nonce, timestamp)
-
-	hasher := sha1.New()
-	hasher.Write([]byte(signStr))
-	sha := hex.EncodeToString(hasher.Sum(nil))
-	return sha
 }
 
 func (c *Client) login() {
@@ -437,24 +349,9 @@ func (c *Client) login() {
 
 	c.ClientID = clientId.String()
 	c.BrokerUser = userId
-	c.Secret = extractSecret(token)
+	c.Secret = ExtractSecret(token)
 
 	if !c.Quiet {
 		log.Printf("CLIENT %d login success, mobile: %s, clientId: %s, userId: %s", c.ID, mobile, c.ClientID, c.BrokerUser)
 	}
-}
-
-func extractSecret(token string) string {
-	base64Text, err := base64.StdEncoding.DecodeString(token)
-	if err != nil {
-		log.Panic(err)
-	}
-	cipherText, err := AesDecrypt(base64Text, "")
-	if err != nil {
-		log.Panic(err)
-	}
-
-	content := string(cipherText)
-	contents := strings.Split(content, "|")
-	return contents[1]
 }

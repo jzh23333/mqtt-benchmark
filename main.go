@@ -71,7 +71,7 @@ func main() {
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
-		count           = flag.Int("count", 50, "Number of messages to send per client")
+		count           = flag.Int("count", 10, "Number of messages to send per client")
 		clients         = flag.Int("clients", 100, "Number of clients to start")
 		format          = flag.String("format", "text", "Output format: text|json")
 		lite            = flag.Bool("lite", true, "ignore msg while running")
@@ -106,6 +106,8 @@ func main() {
 	if *clientCert != "" && *clientKey != "" {
 		tlsConfig = generateTLSConfig(*clientCert, *clientKey, *brokerCaCert, *insecure)
 	}
+
+	//createUserAndAddGroup(1000, "vygqmws2k", *server, *adminPort)
 
 	resCh := make(chan *RunResults)
 	connected := make(chan string)
@@ -167,6 +169,17 @@ func main() {
 
 	// print stats
 	printResults(results, totals, *format)
+}
+
+func createUserAndAddGroup(count int, groupId, url, port string) {
+	for i := 0; i < count; i++ {
+		var userId = fmt.Sprintf("U_%v", i)
+		if !CheckUserExist(userId, url, port) {
+			CreateUser(userId, url, port)
+		}
+	}
+
+	AddGroupMember(count, "admin", groupId, url, port)
 }
 
 func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampleSize int) *TotalResults {

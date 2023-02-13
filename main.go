@@ -67,12 +67,13 @@ func main() {
 		secret          = flag.String("secret", "a50f6f2f-3bdc-422e-b02d-45a2ba43439a", "MQTT message aes encrypt key")
 		username        = flag.String("username", "9ygqmws2k", "MQTT client username (empty if auth disabled)")
 		password        = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
+		groupId         = flag.String("groupId", "ohgqmws2k", "MQTT client password (empty if auth disabled)")
 		identity        = flag.Int("identity", 1, "current server`s identity, 1 is sender or 2 is receiver")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
-		count           = flag.Int("count", 10, "Number of messages to send per client")
-		clients         = flag.Int("clients", 100, "Number of clients to start")
+		count           = flag.Int("count", 1, "Number of messages to send per client")
+		clients         = flag.Int("clients", 10, "Number of clients to start")
 		format          = flag.String("format", "text", "Output format: text|json")
 		lite            = flag.Bool("lite", true, "ignore msg while running")
 		quiet           = flag.Bool("quiet", true, "Suppress logs while running")
@@ -107,8 +108,6 @@ func main() {
 		tlsConfig = generateTLSConfig(*clientCert, *clientKey, *brokerCaCert, *insecure)
 	}
 
-	//createUserAndAddGroup(1000, "vygqmws2k", *server, *adminPort)
-
 	resCh := make(chan *RunResults)
 	connected := make(chan string)
 	beginPub := make(chan bool)
@@ -125,6 +124,7 @@ func main() {
 			AdminPort:       *adminPort,
 			BrokerUser:      *username,
 			BrokerPass:      *password,
+			GroupId:         *groupId,
 			MsgPayload:      *payload,
 			Identity:        *identity,
 			Secret:          *secret,
@@ -142,22 +142,22 @@ func main() {
 	}
 
 	start := time.Now()
-	connectedClients := 0
-	for connectedClients < *clients {
-		u := <-connected
-		log.Printf("Client %v is connected, user: %v", connectedClients, u)
-		connectedClients++
-	}
+	//connectedClients := 0
+	//for connectedClients < *clients {
+	//	u := <-connected
+	//	log.Printf("Client %v is connected, user: %v", connectedClients, u)
+	//	connectedClients++
+	//}
 
-	action := "publishing"
-	if *identity == 2 {
-		action = "receiving"
-	}
-	log.Printf("All clients(size: %v) are connected, will start %s message in 3 seconds...", *clients, action)
-	time.Sleep(time.Duration(3) * time.Second)
-	for i := 0; i < *clients; i++ {
-		beginPub <- true
-	}
+	//action := "publishing"
+	//if *identity == 2 {
+	//	action = "receiving"
+	//}
+	//log.Printf("All clients(size: %v) are connected, will start %s message in 3 seconds...", *clients, action)
+	//time.Sleep(time.Duration(3) * time.Second)
+	//for i := 0; i < *clients; i++ {
+	//	beginPub <- true
+	//}
 
 	// collect the results
 	results := make([]*RunResults, *clients)
@@ -184,7 +184,7 @@ func createUserAndAddGroup(count int, groupId, url, port string) {
 
 func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampleSize int) *TotalResults {
 	totals := new(TotalResults)
-	totals.TotalRunTime = totalTime.Seconds() - 3
+	totals.TotalRunTime = totalTime.Seconds()
 
 	msgTimeMeans := make([]float64, len(results))
 	msgsPerSecs := make([]float64, len(results))
@@ -196,7 +196,6 @@ func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampl
 		totals.Successes += res.Successes
 		totals.Failures += res.Failures
 		totals.TotalMsgsPerSec += res.MsgsPerSec
-		//totals.TotalRunTime += res.RunTime - 3
 
 		if res.MsgTimeMin < totals.MsgTimeMin {
 			totals.MsgTimeMin = res.MsgTimeMin
@@ -208,7 +207,7 @@ func calculateTotalResults(results []*RunResults, totalTime time.Duration, sampl
 
 		msgTimeMeans[i] = res.MsgTimeMean
 		msgsPerSecs[i] = res.MsgsPerSec
-		runTimes[i] = res.RunTime - 3
+		runTimes[i] = res.RunTime
 		bws[i] = res.MsgsPerSec
 	}
 	totals.Ratio = float64(totals.Successes) / float64(totals.Successes+totals.Failures)

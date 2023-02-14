@@ -45,6 +45,35 @@ func CreateUser(userId, url, port string) string {
 	return data["userId"].(string)
 }
 
+func CreateGroup(id, count int, userId, url, port string) string {
+	members := make([]map[string]string, count)
+	for i := 0; i < count; i++ {
+		members[i] = map[string]string{
+			"member_id": fmt.Sprintf("U_%v", i),
+			"alias":     fmt.Sprintf("SU_%v", i),
+			"type":      "0",
+		}
+	}
+
+	postBody, _ := json.Marshal(map[string]interface{}{
+		"operator": userId,
+		"group": map[string]interface{}{
+			"group_info": map[string]string{
+				"name":  fmt.Sprintf("Test%v", id),
+				"owner": userId,
+				"type":  "3",
+			},
+			"members": members,
+		},
+	})
+	result := adminPost(fmt.Sprintf("http://%s:%s/admin/group/create", url, port), postBody)
+	if result["code"].(float64) != 0 {
+		log.Panicf("create group failure: %v", result)
+	}
+	data := result["result"].(map[string]interface{})
+	return data["group_id"].(string)
+}
+
 func AddGroupMember(count int, userId, groupId, url, port string) {
 	members := make([]map[string]string, count)
 	for i := 0; i < count; i++ {

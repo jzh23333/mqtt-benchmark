@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"time"
 
 	"github.com/GaryBoone/GoStats/stats"
@@ -67,7 +68,7 @@ func main() {
 		secret          = flag.String("secret", "a50f6f2f-3bdc-422e-b02d-45a2ba43439a", "MQTT message aes encrypt key")
 		username        = flag.String("username", "9ygqmws2k", "MQTT client username (empty if auth disabled)")
 		password        = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
-		groupId         = flag.String("groupId", "ohgqmws2k", "MQTT client password (empty if auth disabled)")
+		groupId         = flag.String("groupId", "", "MQTT client password (empty if auth disabled)")
 		identity        = flag.Int("identity", 1, "current server`s identity, 1 is sender or 2 is receiver")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
@@ -83,7 +84,7 @@ func main() {
 		brokerCaCert    = flag.String("broker-ca-cert", "", "Path to broker CA certificate in PEM format")
 		insecure        = flag.Bool("insecure", false, "Skip TLS certificate verification")
 		rampUpTimeInSec = flag.Int("ramp-up-time", 0, "Time in seconds to generate clients by default will not wait between load request")
-		messageInterval = flag.Int("message-interval", 10, "Time interval in milliseconds to publish message")
+		messageInterval = flag.Int("message-interval", 0, "Time interval in milliseconds to publish message")
 	)
 
 	flag.Parse()
@@ -106,6 +107,10 @@ func main() {
 	var tlsConfig *tls.Config
 	if *clientCert != "" && *clientKey != "" {
 		tlsConfig = generateTLSConfig(*clientCert, *clientKey, *brokerCaCert, *insecure)
+	}
+
+	if *groupId == "" {
+		*groupId = createUserAndGroup(4999, "nygqmws2k", *server, *adminPort)
 	}
 
 	resCh := make(chan *RunResults)
@@ -169,6 +174,18 @@ func main() {
 
 	// print stats
 	printResults(results, totals, *format)
+}
+
+func createUserAndGroup(count int, owner, url, port string) string {
+	//for i := 0; i < count; i++ {
+	//	var userId = fmt.Sprintf("U_%v", i)
+	//	if !CheckUserExist(userId, url, port) {
+	//		CreateUser(userId, url, port)
+	//	}
+	//}
+
+	id := rand.Int()
+	return CreateGroup(id, count, owner, url, port)
 }
 
 func createUserAndAddGroup(count int, groupId, url, port string) {

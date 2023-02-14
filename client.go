@@ -30,10 +30,13 @@ type Client struct {
 	AdminPort       string
 	BrokerUser      string
 	BrokerPass      string
+	WatchId         string
 	GroupId         string
+	ChatroomId      string
 	MsgPayload      string
 	Secret          string
 	Identity        int
+	MsgType         int32
 	MsgSize         int
 	MsgCount        int
 	MsgQoS          byte
@@ -54,12 +57,12 @@ func (c *Client) Run(res chan *RunResults, connected chan string, beginPub chan 
 
 	// load clientUser
 	c.loadClientUser()
-
-	started := time.Now()
 	// start generator
 	go c.genMessages(newMsgs, beginPub, doneGen)
 	// start publisher
 	go c.pubMessages(newMsgs, pubMsgs, connected, doneGen, donePub)
+
+	started := time.Now()
 
 	runResults.ID = c.ID
 	var times []float64
@@ -98,12 +101,19 @@ func (c *Client) Run(res chan *RunResults, connected chan string, beginPub chan 
 func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 	var payload interface{}
 
-	//<-beginPub
+	<-beginPub
 
 	if c.Identity == 1 {
 		topic := "MS"
 		for i := 0; i < c.MsgCount; i++ {
-			msgBytes := getP2PSendMsg(1, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+			var msgBytes []byte
+			if c.MsgType == 0 {
+				msgBytes = getP2PSendMsg(c.MsgType, c.WatchId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+			} else if c.MsgType == 1 {
+				msgBytes = getP2PSendMsg(c.MsgType, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+			} else {
+				msgBytes = getP2PSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+			}
 
 			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
 			payload = cipherText
@@ -113,7 +123,9 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 				QoS:     c.MsgQoS,
 				Payload: payload,
 			}
-			time.Sleep(time.Duration(c.MessageInterval) * time.Millisecond)
+			if c.MessageInterval > 0 {
+				time.Sleep(time.Duration(c.MessageInterval) * time.Millisecond)
+			}
 		}
 	} else {
 		topic := "MP"
@@ -138,41 +150,12 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 }
 
 func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneGen, donePub chan bool) {
-	//messageHandler := func(client mqtt.Client, msg mqtt.Message) {
-	//	log.Printf("Received message from topic: %s", msg.Topic())
-	//	if msg.Topic() == "MP" {
-	//		result := &pb.PullMessageResult{}
-	//		if err := proto.Unmarshal(msg.Payload(), result); err != nil {
-	//			log.Fatalln(err)
-	//		}
-	//		log.Printf("Received message, user %v pull message: %d,%v", c.BrokerUser, len(result.Message), result)
-	//	} else if msg.Topic() == "MS" {
-	//		result := &pb.Message{}
-	//		if err := proto.Unmarshal(msg.Payload(), result); err != nil {
-	//			log.Fatalln(err)
-	//		}
-	//		log.Printf("Received message, user %v send message: %v", c.BrokerUser, result)
-	//	} else if msg.Topic() == "MN" {
-	//		result := &pb.NotifyMessage{}
-	//		if err := proto.Unmarshal(msg.Payload(), result); err != nil {
-	//			log.Fatalln(err)
-	//		}
-	//		log.Printf("User %v received notify message: %v", c.BrokerUser, result)
-	//
-	//		current := *result.Head - 1
-	//		msgBytes := getPullMsg(&current)
-	//		cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-	//		token := client.Publish("MP", c.MsgQoS, true, cipherText)
-	//		res := token.WaitTimeout(c.WaitTimeout)
-	//		log.Printf("Send pull message: %v", res)
-	//	}
-	//}
 	onConnected := func(client mqtt.Client) {
 		if !c.Quiet {
 			log.Printf("CLIENT %v is connected to the broker %v:%v, clientId: %s, fromUser: %s\n",
 				c.ID, c.ServerURL, c.IMPort, c.ClientID, c.BrokerUser)
 		}
-		//connected <- c.BrokerUser
+		connected <- c.BrokerUser
 		ctr := 0
 		for {
 			select {

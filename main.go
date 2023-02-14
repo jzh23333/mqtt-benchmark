@@ -68,12 +68,16 @@ func main() {
 		secret          = flag.String("secret", "a50f6f2f-3bdc-422e-b02d-45a2ba43439a", "MQTT message aes encrypt key")
 		username        = flag.String("username", "9ygqmws2k", "MQTT client username (empty if auth disabled)")
 		password        = flag.String("password", "123123", "MQTT client password (empty if auth disabled)")
-		groupId         = flag.String("groupId", "", "MQTT client password (empty if auth disabled)")
+		watchId         = flag.String("watchId", "", "receive message")
+		groupId         = flag.String("groupId", "", "send message to group")
+		chatroomId      = flag.String("chatroomId", "", "MQTT client password (empty if auth disabled)")
 		identity        = flag.Int("identity", 1, "current server`s identity, 1 is sender or 2 is receiver")
+		msgType         = flag.Int("msg-type", 2, "send message type")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
 		count           = flag.Int("count", 1, "Number of messages to send per client")
+		groupSize       = flag.Int("group-size", 999, "Number of group member to create group")
 		clients         = flag.Int("clients", 10, "Number of clients to start")
 		format          = flag.String("format", "text", "Output format: text|json")
 		lite            = flag.Bool("lite", true, "ignore msg while running")
@@ -84,7 +88,7 @@ func main() {
 		brokerCaCert    = flag.String("broker-ca-cert", "", "Path to broker CA certificate in PEM format")
 		insecure        = flag.Bool("insecure", false, "Skip TLS certificate verification")
 		rampUpTimeInSec = flag.Int("ramp-up-time", 0, "Time in seconds to generate clients by default will not wait between load request")
-		messageInterval = flag.Int("message-interval", 0, "Time interval in milliseconds to publish message")
+		messageInterval = flag.Int("message-interval", 10, "Time interval in milliseconds to publish message")
 	)
 
 	flag.Parse()
@@ -109,8 +113,8 @@ func main() {
 		tlsConfig = generateTLSConfig(*clientCert, *clientKey, *brokerCaCert, *insecure)
 	}
 
-	if *groupId == "" {
-		*groupId = createUserAndGroup(4999, "nygqmws2k", *server, *adminPort)
+	if *msgType == 1 && *groupId == "" {
+		*groupId = createUserAndGroup(*groupSize, *watchId, *server, *adminPort)
 	}
 
 	resCh := make(chan *RunResults)
@@ -129,9 +133,12 @@ func main() {
 			AdminPort:       *adminPort,
 			BrokerUser:      *username,
 			BrokerPass:      *password,
+			WatchId:         *watchId,
 			GroupId:         *groupId,
+			ChatroomId:      *chatroomId,
 			MsgPayload:      *payload,
 			Identity:        *identity,
+			MsgType:         int32(*msgType),
 			Secret:          *secret,
 			MsgSize:         *size,
 			MsgCount:        *count,
@@ -143,26 +150,28 @@ func main() {
 			MessageInterval: *messageInterval,
 		}
 		go c.Run(resCh, connected, beginPub)
-		time.Sleep(time.Duration(sleepTime*1000) * time.Millisecond)
+		if sleepTime > 0 {
+			time.Sleep(time.Duration(sleepTime*1000) * time.Millisecond)
+		}
+	}
+	start := time.Now()
+
+	connectedClients := 0
+	for connectedClients < *clients {
+		u := <-connected
+		log.Printf("Client %v is connected, user: %v", connectedClients, u)
+		connectedClients++
 	}
 
-	start := time.Now()
-	//connectedClients := 0
-	//for connectedClients < *clients {
-	//	u := <-connected
-	//	log.Printf("Client %v is connected, user: %v", connectedClients, u)
-	//	connectedClients++
-	//}
+	action := "publishing"
+	if *identity == 2 {
+		action = "receiving"
+	}
+	log.Printf("All clients(size: %v) are connected, will start %s message...", *clients, action)
 
-	//action := "publishing"
-	//if *identity == 2 {
-	//	action = "receiving"
-	//}
-	//log.Printf("All clients(size: %v) are connected, will start %s message in 3 seconds...", *clients, action)
-	//time.Sleep(time.Duration(3) * time.Second)
-	//for i := 0; i < *clients; i++ {
-	//	beginPub <- true
-	//}
+	for i := 0; i < *clients; i++ {
+		beginPub <- true
+	}
 
 	// collect the results
 	results := make([]*RunResults, *clients)

@@ -52,3 +52,7 @@ message NotifyMessage {
   required int64 head = 2;
   optional string target = 3;
 }
+
+message IDBuf {
+  required string id = 1;
+}

@@ -510,6 +510,53 @@ func (x *NotifyMessage) GetTarget() string {
 	return ""
 }
 
+type IDBuf struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id *string `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
+}
+
+func (x *IDBuf) Reset() {
+	*x = IDBuf{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_pb_message_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *IDBuf) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IDBuf) ProtoMessage() {}
+
+func (x *IDBuf) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_message_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IDBuf.ProtoReflect.Descriptor instead.
+func (*IDBuf) Descriptor() ([]byte, []int) {
+	return file_pb_message_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *IDBuf) GetId() string {
+	if x != nil && x.Id != nil {
+		return *x.Id
+	}
+	return ""
+}
+
 var File_pb_message_proto protoreflect.FileDescriptor
 
 var file_pb_message_proto_rawDesc = []byte{
@@ -579,8 +626,9 @@ var file_pb_message_proto_rawDesc = []byte{
 	0x12, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x02, 0x28, 0x05, 0x52, 0x04, 0x74,
 	0x79, 0x70, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x68, 0x65, 0x61, 0x64, 0x18, 0x02, 0x20, 0x02, 0x28,
 	0x03, 0x52, 0x04, 0x68, 0x65, 0x61, 0x64, 0x12, 0x16, 0x0a, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65,
-	0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x42,
-	0x05, 0x5a, 0x03, 0x2f, 0x70, 0x62,
+	0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x22,
+	0x17, 0x0a, 0x05, 0x49, 0x44, 0x42, 0x75, 0x66, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x02, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x42, 0x05, 0x5a, 0x03, 0x2f, 0x70, 0x62,
 }
 
 var (
@@ -595,7 +643,7 @@ func file_pb_message_proto_rawDescGZIP() []byte {
 	return file_pb_message_proto_rawDescData
 }
 
-var file_pb_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_pb_message_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_pb_message_proto_goTypes = []interface{}{
 	(*Message)(nil),            // 0: pb.Message
 	(*Conversation)(nil),       // 1: pb.Conversation
@@ -603,6 +651,7 @@ var file_pb_message_proto_goTypes = []interface{}{
 	(*PullMessageRequest)(nil), // 3: pb.PullMessageRequest
 	(*PullMessageResult)(nil),  // 4: pb.PullMessageResult
 	(*NotifyMessage)(nil),      // 5: pb.NotifyMessage
+	(*IDBuf)(nil),              // 6: pb.IDBuf
 }
 var file_pb_message_proto_depIdxs = []int32{
 	1, // 0: pb.Message.conversation:type_name -> pb.Conversation
@@ -693,6 +742,18 @@ func file_pb_message_proto_init() {
 				return nil
 			}
 		}
+		file_pb_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*IDBuf); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -700,7 +761,7 @@ func file_pb_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_pb_message_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

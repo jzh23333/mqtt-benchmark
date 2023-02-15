@@ -108,11 +108,11 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 		for i := 0; i < c.MsgCount; i++ {
 			var msgBytes []byte
 			if c.MsgType == 0 {
-				msgBytes = getP2PSendMsg(c.MsgType, c.WatchId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+				msgBytes = getSendMsg(c.MsgType, c.WatchId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
 			} else if c.MsgType == 1 {
-				msgBytes = getP2PSendMsg(c.MsgType, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+				msgBytes = getSendMsg(c.MsgType, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
 			} else {
-				msgBytes = getP2PSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
+				msgBytes = getSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
 			}
 
 			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
@@ -128,14 +128,35 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 			}
 		}
 	} else {
-		topic := "MP"
-
 		interval := 10
 		totalInterval := 0
 		for {
-			ch <- &Message{
-				Topic: topic,
+			if totalInterval == 0 && c.MsgType == 2 {
+				msgBytes := getIDMsg(c.ChatroomId)
+				cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+				payload = cipherText
+
+				ch <- &Message{
+					Topic:   "CRJ",
+					QoS:     c.MsgQoS,
+					Payload: payload,
+				}
+			} else if totalInterval == 10 && c.MsgType == 2 {
+				//msgBytes := getSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-chatroom-%v", c.MsgPayload, c.ID))
+				//cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+				//payload = cipherText
+				//
+				//ch <- &Message{
+				//	Topic:   "MS",
+				//	QoS:     c.MsgQoS,
+				//	Payload: payload,
+				//}
+			} else {
+				ch <- &Message{
+					Topic: "SPIN",
+				}
 			}
+
 			totalInterval += interval
 			time.Sleep(time.Duration(interval) * time.Millisecond)
 
@@ -150,6 +171,16 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 }
 
 func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneGen, donePub chan bool) {
+	messageHandler := func(client mqtt.Client, msg mqtt.Message) {
+		//log.Printf("Received message from topic: %s", msg.Topic())
+		if msg.Topic() == "MN" && c.Identity == 2 {
+			result := &pb.NotifyMessage{}
+			if err := proto.Unmarshal(msg.Payload(), result); err != nil {
+				log.Fatalln(err)
+			}
+			log.Printf("User %v received notify message: %v", c.BrokerUser, result)
+		}
+	}
 	onConnected := func(client mqtt.Client) {
 		if !c.Quiet {
 			log.Printf("CLIENT %v is connected to the broker %v:%v, clientId: %s, fromUser: %s\n",
@@ -160,7 +191,7 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 		for {
 			select {
 			case m := <-in:
-				if m.Topic == "MP" {
+				if m.Topic == "SPIN" {
 					continue
 				}
 				m.Sent = time.Now()
@@ -201,7 +232,7 @@ func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneG
 		SetKeepAlive(time.Duration(30) * time.Second).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
-		//SetDefaultPublishHandler(messageHandler).
+		SetDefaultPublishHandler(messageHandler).
 		SetOnConnectHandler(onConnected).
 		SetConnectionLostHandler(func(client mqtt.Client, reason error) {
 			log.Printf("CLIENT %v lost connection to the broker: %v. Will reconnect...\n", c.ID, reason.Error())
@@ -234,7 +265,7 @@ func getPassword(username, secret string) string {
 	return string(aesPwd)
 }
 
-func getP2PSendMsg(conversationType int32, target, fromUser, content string) []byte {
+func getSendMsg(conversationType int32, target, fromUser, content string) []byte {
 	var conversationLine int32 = 0
 	var contentType int32 = 1
 	var persistFlag int32 = 3
@@ -251,6 +282,15 @@ func getP2PSendMsg(conversationType int32, target, fromUser, content string) []b
 			PersistFlag:       &persistFlag,
 		},
 	}
+	msgBytes, err := proto.Marshal(msg)
+	if err != nil {
+		log.Panic(err)
+	}
+	return msgBytes
+}
+
+func getIDMsg(id string) []byte {
+	msg := &pb.IDBuf{Id: &id}
 	msgBytes, err := proto.Marshal(msg)
 	if err != nil {
 		log.Panic(err)

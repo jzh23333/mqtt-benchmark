@@ -99,30 +99,11 @@ func (c *Client) Run(res chan *RunResults, connected chan string, beginPub chan 
 }
 
 func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
-	var payload interface{}
-
 	<-beginPub
 
 	if c.Identity == 1 {
-		topic := "MS"
 		for i := 0; i < c.MsgCount; i++ {
-			var msgBytes []byte
-			if c.MsgType == 0 {
-				msgBytes = getSendMsg(c.MsgType, c.WatchId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
-			} else if c.MsgType == 1 {
-				msgBytes = getSendMsg(c.MsgType, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
-			} else {
-				msgBytes = getSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-%d", c.MsgPayload, i))
-			}
-
-			cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-			payload = cipherText
-
-			ch <- &Message{
-				Topic:   topic,
-				QoS:     c.MsgQoS,
-				Payload: payload,
-			}
+			c.sendMessage(ch, i)
 			if c.MessageInterval > 0 {
 				time.Sleep(time.Duration(c.MessageInterval) * time.Millisecond)
 			}
@@ -132,25 +113,7 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 		totalInterval := 0
 		for {
 			if totalInterval == 0 && c.MsgType == 2 {
-				msgBytes := getIDMsg(c.ChatroomId)
-				cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-				payload = cipherText
-
-				ch <- &Message{
-					Topic:   "CRJ",
-					QoS:     c.MsgQoS,
-					Payload: payload,
-				}
-			} else if totalInterval == 10 && c.MsgType == 2 {
-				//msgBytes := getSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-chatroom-%v", c.MsgPayload, c.ID))
-				//cipherText, _ := AesEncrypt(msgBytes, c.Secret)
-				//payload = cipherText
-				//
-				//ch <- &Message{
-				//	Topic:   "MS",
-				//	QoS:     c.MsgQoS,
-				//	Payload: payload,
-				//}
+				c.joinChatRoom(ch)
 			} else {
 				ch <- &Message{
 					Topic: "SPIN",
@@ -160,7 +123,7 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 			totalInterval += interval
 			time.Sleep(time.Duration(interval) * time.Millisecond)
 
-			if totalInterval >= 1800000 {
+			if totalInterval >= 3600000 {
 				break
 			}
 		}
@@ -168,6 +131,37 @@ func (c *Client) genMessages(ch chan *Message, beginPub, done chan bool) {
 
 	done <- true
 	// log.Printf("CLIENT %v is done generating messages\n", c.ID)
+}
+
+func (c *Client) joinChatRoom(ch chan *Message) {
+	msgBytes := getIDMsg(c.ChatroomId)
+	cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+	payload := cipherText
+
+	ch <- &Message{
+		Topic:   "CRJ",
+		QoS:     c.MsgQoS,
+		Payload: payload,
+	}
+}
+
+func (c *Client) sendMessage(ch chan *Message, i int) {
+	var msgBytes []byte
+	if c.MsgType == 0 {
+		msgBytes = getSendMsg(c.MsgType, c.WatchId, c.BrokerUser, fmt.Sprintf("%s-single-%d", c.MsgPayload, i))
+	} else if c.MsgType == 1 {
+		msgBytes = getSendMsg(c.MsgType, c.GroupId, c.BrokerUser, fmt.Sprintf("%s-group-%d", c.MsgPayload, i))
+	} else {
+		msgBytes = getSendMsg(c.MsgType, c.ChatroomId, c.BrokerUser, fmt.Sprintf("%s-chatroom-%d", c.MsgPayload, i))
+	}
+
+	cipherText, _ := AesEncrypt(msgBytes, c.Secret)
+
+	ch <- &Message{
+		Topic:   "MS",
+		QoS:     c.MsgQoS,
+		Payload: cipherText,
+	}
 }
 
 func (c *Client) pubMessages(in, out chan *Message, connected chan string, doneGen, donePub chan bool) {

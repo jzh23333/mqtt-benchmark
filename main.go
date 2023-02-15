@@ -71,15 +71,16 @@ func main() {
 		watchId         = flag.String("watchId", "", "receive message")
 		groupId         = flag.String("groupId", "", "send message to group")
 		chatroomId      = flag.String("chatroomId", "chatroom1", "MQTT client password (empty if auth disabled)")
-		identity        = flag.Int("identity", 2, "current server`s identity, 1 is sender or 2 is receiver")
+		identity        = flag.Int("identity", 1, "current server`s identity, 1 is sender or 2 is receiver")
 		msgType         = flag.Int("msg-type", 2, "send message type")
 		qos             = flag.Int("qos", 1, "QoS for published messages")
 		wait            = flag.Int("wait", 60000, "QoS 1 wait timeout in milliseconds")
 		size            = flag.Int("size", 100, "Size of the messages payload (bytes)")
 		count           = flag.Int("count", 1, "Number of messages to send per client")
-		clients         = flag.Int("clients", 2, "Number of clients to start")
+		clients         = flag.Int("clients", 10, "Number of clients to start")
 		groupSize       = flag.Int("group-size", 999, "Number of group member to create group")
 		format          = flag.String("format", "text", "Output format: text|json")
+		chatroomInfo    = flag.Bool("chatroomInfo", false, "ignore msg while running")
 		lite            = flag.Bool("lite", true, "ignore msg while running")
 		quiet           = flag.Bool("quiet", true, "Suppress logs while running")
 		clientPrefix    = flag.String("client-prefix", "44e362c5-8717-4ea7-8f22-c9b1286832971672797923817", "MQTT client id prefix (suffixed with '-<client-num>'")
@@ -115,6 +116,11 @@ func main() {
 
 	if *msgType == 1 && *groupId == "" {
 		*groupId = createUserAndGroup(*groupSize, *watchId, *server, *adminPort)
+	}
+
+	if *chatroomInfo {
+		GetChatroomInfo(*chatroomId, *server, *adminPort)
+		return
 	}
 
 	resCh := make(chan *RunResults)

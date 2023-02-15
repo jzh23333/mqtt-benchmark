@@ -95,6 +95,17 @@ func AddGroupMember(count int, userId, groupId, url, port string) {
 	}
 }
 
+func GetChatroomInfo(chatroomId, url, port string) {
+	postBody, _ := json.Marshal(map[string]interface{}{
+		"chatroomId": chatroomId,
+	})
+	result := adminPost(fmt.Sprintf("http://%s:%s/admin/chatroom/info", url, port), postBody)
+	if result["code"].(float64) != 0 {
+		log.Panicf("add group member failure: %v", result)
+	}
+	log.Println("chatroomInfo: ", result)
+}
+
 func GetSecret(userId, clientId, url, port string) string {
 	postBody, _ := json.Marshal(map[string]string{
 		"userId":   userId,
